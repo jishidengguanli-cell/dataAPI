@@ -2,4 +2,3 @@ pandas
 matplotlib
 aliyun-python-sdk-core
 telethon
-fonts-noto-cjk
