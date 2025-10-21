@@ -1,0 +1,16 @@
+app = "your-fly-app-name"
+primary_region = "nrt"   # 可改成你要的地區
+
+[processes]
+worker = "python /app/dataAPI.py"
+
+[[vm]]
+  memory_mb = 1024
+  cpus = 1
+  cpu_kind = "shared"
+  processes = ["worker"]
+
+# 掛載一個命名為 "data" 的 Volume 到 /data，保存 Telethon session 與每日輸出
+[[mounts]]
+  source = "data"
+  destination = "/data"
