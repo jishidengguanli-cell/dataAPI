@@ -23,8 +23,8 @@ TELEGRAM_SESSION = 'user'
 TELEGRAM_GROUP_ID = -4913948412
 TELEGRAM_GROUP_ID2 = -4913948412
 
-# zh_font = fm.FontProperties(fname="/usr/share/fonts/google-noto-cjk/NotoSansCJK-Regular.ttc")
-zh_font = fm.FontProperties(fname="C:/Windows/Fonts/msjh.ttc")
+zh_font = fm.FontProperties(fname="/usr/share/fonts/google-noto-cjk/NotoSansCJK-Regular.ttc")
+# zh_font = fm.FontProperties(fname="C:/Windows/Fonts/msjh.ttc")
 
 
 # ======================== 兩組專案配置 ========================
