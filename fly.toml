@@ -1,5 +1,8 @@
-app = "dataAPI"
-primary_region = "nrt"   # 可改成你要的地區
+app = "dataapi"          # ⚠️ 這裡要跟 Fly dashboard 上 App 名稱完全一致
+primary_region = "nrt"   # 東京，可改成你要的地區
+
+[build]
+dockerfile = "Dockerfile"
 
 [processes]
 worker = "python /app/dataAPI.py"
@@ -10,7 +13,6 @@ worker = "python /app/dataAPI.py"
   cpu_kind = "shared"
   processes = ["worker"]
 
-# 掛載一個命名為 "data" 的 Volume 到 /data，保存 Telethon session 與每日輸出
 [[mounts]]
   source = "data"
   destination = "/data"
