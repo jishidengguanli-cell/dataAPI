@@ -1,4 +1,4 @@
-app = "your-fly-app-name"
+app = "dataAPI"
 primary_region = "nrt"   # 可改成你要的地區
 
 [processes]
