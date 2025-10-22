@@ -14,7 +14,7 @@ import asyncio
 import time
 
 # ======================== 基本設定 ========================
-TARGET_TW_HOUR = 0
+TARGET_TW_HOUR = 2
 TARGET_TW_MINUTE = 1
 
 TELEGRAM_API_ID = 20304868
