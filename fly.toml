@@ -13,6 +13,6 @@ worker = "python /app/dataAPI.py"
   cpu_kind = "shared"
   processes = ["worker"]
 
- [[mounts]]
+[[mounts]]
   source = "data"
   destination = "/data"
