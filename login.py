@@ -1,23 +1,28 @@
 # login.py
-# 作用：在 Fly.io 上執行一次 Telegram「QR 登入」
-# 成功後會把 session 檔存到 TELEGRAM_SESSION 指定的路徑（建議 /data/user）
-# 需要的環境變數：TELEGRAM_API_ID, TELEGRAM_API_HASH, TELEGRAM_SESSION
+# 支援兩種方式：
+# 1) QR 登入（預設）：TELEGRAM_LOGIN_METHOD=qr
+# 2) 6位數碼登入：   TELEGRAM_LOGIN_METHOD=code + TELEGRAM_PHONE_NUMBER + TELEGRAM_LOGIN_CODE (+ TELEGRAM_2FA_PASSWORD 可選)
+#
+# 成功後會把 session 存在 TELEGRAM_SESSION 指定路徑（建議 /data/user），即 /data/user.session
 
 import os
 import sys
 import asyncio
 from telethon import TelegramClient
+from telethon.errors import SessionPasswordNeededError
 
-# 讀環境變數
 API_ID = os.environ.get("TELEGRAM_API_ID")
 API_HASH = os.environ.get("TELEGRAM_API_HASH")
-SESSION_PATH = os.environ.get("TELEGRAM_SESSION", "user")  # 會寫成 /data/user.session
+SESSION_PATH = os.environ.get("TELEGRAM_SESSION", "user")
+LOGIN_METHOD = os.environ.get("TELEGRAM_LOGIN_METHOD", "qr").lower().strip()
 
-if not API_ID or not API_HASH:
-    print("[login.py] 缺少 TELEGRAM_API_ID / TELEGRAM_API_HASH，請先在 Fly 後台 Secrets 設定。")
-    sys.exit(1)
+PHONE = os.environ.get("TELEGRAM_PHONE_NUMBER")           # e.g. +8869xxxxxxx
+CODE  = os.environ.get("TELEGRAM_LOGIN_CODE")             # 6位數登入碼
+PWD   = os.environ.get("TELEGRAM_2FA_PASSWORD", "")       # 若帳號開了兩步驟密碼
 
-# Optional：嘗試在日誌輸出 ASCII QR（若容器有安裝 qrcode，就能在 Logs 看到 2D 條碼）
+def log(msg: str):
+    print(f"[login.py] {msg}", flush=True)
+
 def print_ascii_qr(url: str) -> None:
     try:
         import qrcode
@@ -26,54 +31,87 @@ def print_ascii_qr(url: str) -> None:
         qr.make(fit=True)
         qr.print_ascii(invert=True)
     except Exception as e:
-        # 沒安裝 qrcode 或失敗就忽略，直接印 URL
-        print(f"[login.py]（可選）ASCII QR 產生失敗：{e}")
-        print("[login.py] 請改用下方 URL 於任何 QR 產生器轉為 QR 後，打開 Telegram App 掃描。")
+        log(f"（可選）ASCII QR 產生失敗：{e}")
+        log("請使用下方 URL 到任何 QR 產生器生成圖片，再用 Telegram App 掃描。")
 
-async def do_login():
-    # 用 SESSION_PATH 作為 session 名稱/路徑；將會生成 {SESSION_PATH}.session
-    client = TelegramClient(SESSION_PATH, int(API_ID), API_HASH)
-
+async def login_with_qr(client: TelegramClient):
+    log("選擇：QR 登入流程")
     await client.connect()
-
     if await client.is_user_authorized():
         me = await client.get_me()
-        print(f"[login.py] 已登入：{me.username or me.id}；session 仍有效，無需重登。")
-        await client.disconnect()
+        log(f"已登入：{me.username or me.id}；session 有效，無需重登。")
         return
 
-    print("[login.py] 尚未授權，進入 QR 登入流程…")
-    # 產生一次性 QR 登入，請用 Telegram 手機 App 掃描：設定 → 裝置 → 連結桌面裝置
     qr_login = await client.qr_login()
-
-    print("[login.py] 請在 Telegram 手機 App：設定 → 裝置 → 連結桌面裝置，掃描本 QR。")
-    print("[login.py] 若 Logs 未顯示 QR 圖，請使用以下 URL 生成 QR：")
-    print(qr_login.url)
+    log("請在 Telegram 手機 App：設定 → 裝置 → 連結桌面裝置，掃描下方 QR（或用 URL 產生 QR）：")
+    log(qr_login.url)
     print_ascii_qr(qr_login.url)
 
-    # 等待用戶掃描並確認（通常幾秒內完成）
     try:
-        await qr_login.wait()
-        print("[login.py] QR 登入成功！正在保存 session…")
+        await qr_login.wait()  # 等待使用者掃描確認
+        log("QR 登入成功，正在保存 session…")
     except Exception as e:
-        print(f"[login.py] 登入失敗：{e}")
-        await client.disconnect()
-        sys.exit(2)
+        log(f"登入失敗：{e}")
+        raise
 
-    # 再次確認授權狀態
     if await client.is_user_authorized():
         me = await client.get_me()
-        print(f"[login.py] 完成，已登入為：{me.username or me.id}")
-        print(f"[login.py] Session 檔已寫入：{SESSION_PATH}.session")
+        log(f"完成，已登入為：{me.username or me.id}")
+        log(f"Session 檔：{SESSION_PATH}.session")
     else:
-        print("[login.py] 看起來仍未授權，請重試一次。")
-        await client.disconnect()
-        sys.exit(3)
+        raise RuntimeError("看起來仍未授權，請重試。")
 
-    await client.disconnect()
+async def login_with_code(client: TelegramClient):
+    log("選擇：6位數碼登入流程")
+    if not PHONE or not CODE:
+        raise RuntimeError("缺少 TELEGRAM_PHONE_NUMBER 或 TELEGRAM_LOGIN_CODE。")
+
+    await client.connect()
+    if await client.is_user_authorized():
+        me = await client.get_me()
+        log(f"已登入：{me.username or me.id}；session 有效，無需重登。")
+        return
+
+    log(f"向 {PHONE} 發送登入請求…（如果你已從 Telegram App 收到 6位數碼，直接繼續）")
+    try:
+        # 有些情況 send_code_request 才需要；若你已取得 CODE，也可直接 sign_in
+        await client.send_code_request(PHONE)
+    except Exception as e:
+        log(f"send_code_request 可能無法或非必要：{e}（繼續嘗試 sign_in）")
+
+    try:
+        await client.sign_in(PHONE, CODE)
+    except SessionPasswordNeededError:
+        if not PWD:
+            raise RuntimeError("此帳號開啟了兩步驟密碼，請在 Secrets 設 TELEGRAM_2FA_PASSWORD。")
+        await client.sign_in(password=PWD)
+
+    if await client.is_user_authorized():
+        me = await client.get_me()
+        log(f"完成，已登入為：{me.username or me.id}")
+        log(f"Session 檔：{SESSION_PATH}.session")
+    else:
+        raise RuntimeError("仍未授權，請檢查電話/驗證碼/二步驟密碼。")
+
+async def main():
+    if not API_ID or not API_HASH:
+        log("缺少 TELEGRAM_API_ID / TELEGRAM_API_HASH，請先在 Fly 後台 Secrets 設定。")
+        sys.exit(1)
+
+    # 建立 Client；SESSION_PATH 會生成 {SESSION_PATH}.session
+    client = TelegramClient(SESSION_PATH, int(API_ID), API_HASH)
+
+    try:
+        if LOGIN_METHOD == "code":
+            await login_with_code(client)
+        else:
+            await login_with_qr(client)
+    finally:
+        await client.disconnect()
 
 if __name__ == "__main__":
     try:
-        asyncio.run(do_login())
-    except KeyboardInterrupt:
-        print("[login.py] 中斷。")
+        asyncio.run(main())
+    except Exception as e:
+        log(f"程式終止：{e}")
+        sys.exit(2)
