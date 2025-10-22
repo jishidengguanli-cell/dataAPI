@@ -1,5 +1,5 @@
 app = "dataapi"          # ⚠️ 這裡要跟 Fly dashboard 上 App 名稱完全一致
-primary_region = "nrt"   # 東京，可改成你要的地區
+primary_region = "sin"   # 東京，可改成你要的地區
 
 [build]
 dockerfile = "Dockerfile"
@@ -13,6 +13,6 @@ worker = "python /app/dataAPI.py"
   cpu_kind = "shared"
   processes = ["worker"]
 
-[[mounts]]
-  source = "data"
-  destination = "/data"
+# [[mounts]]
+#  source = "data"
+#  destination = "/data"
